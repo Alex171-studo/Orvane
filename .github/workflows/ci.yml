@@ -1,0 +1,19 @@
+name: Vérification ORVANE
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    env:
+      APP_MODE: demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest --cov=src --cov-report=term-missing --cov-fail-under=85
+      - run: python scripts/smoke_test.py

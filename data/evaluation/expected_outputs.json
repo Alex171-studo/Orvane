@@ -1,0 +1,451 @@
+[
+  {
+    "id": "C01",
+    "actions": [
+      {
+        "description": "Appeler le fournisseur",
+        "assignee": "Karim",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "appeler",
+            "contacter",
+            "téléphoner",
+            "appel"
+          ],
+          [
+            "fournisseur"
+          ]
+        ],
+        "id": "C01-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C02",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C02-A1"
+      },
+      {
+        "description": "Vérifier le stock de gaines",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "vérifier",
+            "contrôler",
+            "vérification"
+          ],
+          [
+            "stock",
+            "quantités"
+          ],
+          [
+            "gaines"
+          ]
+        ],
+        "id": "C02-A2"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C03",
+    "actions": [
+      {
+        "description": "Appeler le fournisseur",
+        "assignee": "Karim",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "appeler",
+            "contacter",
+            "téléphoner",
+            "appel"
+          ],
+          [
+            "fournisseur"
+          ]
+        ],
+        "id": "C03-A1"
+      },
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C03-A2"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C04",
+    "actions": [
+      {
+        "description": "Commander les joints",
+        "assignee": null,
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "commander",
+            "commande",
+            "acheter"
+          ],
+          [
+            "joints"
+          ]
+        ],
+        "id": "C04-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": true
+  },
+  {
+    "id": "C05",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": "2026-03-20",
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C05-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C06",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": "2026-03-17",
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C06-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C07",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C07-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": true
+  },
+  {
+    "id": "C08",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": true
+  },
+  {
+    "id": "C09",
+    "actions": [],
+    "observations": [
+      {
+        "concept": "carrelage",
+        "status": "Terminé"
+      }
+    ],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C10",
+    "actions": [],
+    "observations": [
+      {
+        "concept": "bardage",
+        "status": "En cours"
+      }
+    ],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C11",
+    "actions": [],
+    "observations": [],
+    "decisions": 1,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C12",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C13",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 1,
+    "clarification": false
+  },
+  {
+    "id": "C14",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 1,
+    "clarification": false
+  },
+  {
+    "id": "C15",
+    "actions": [
+      {
+        "description": "Appeler le fournisseur",
+        "assignee": "Karim",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "appeler",
+            "contacter",
+            "téléphoner",
+            "appel"
+          ],
+          [
+            "fournisseur"
+          ]
+        ],
+        "id": "C15-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C16",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": true
+  },
+  {
+    "id": "C17",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C17-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C18",
+    "actions": [
+      {
+        "description": "Appeler le fournisseur",
+        "assignee": "Karim",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "appeler",
+            "contacter",
+            "téléphoner",
+            "appel"
+          ],
+          [
+            "fournisseur"
+          ]
+        ],
+        "id": "C18-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C19",
+    "actions": [],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C20",
+    "actions": [
+      {
+        "description": "Appeler le fournisseur",
+        "assignee": "Karim",
+        "due_date": null,
+        "status": "À faire",
+        "concepts": [
+          [
+            "appeler",
+            "contacter",
+            "téléphoner",
+            "appel"
+          ],
+          [
+            "fournisseur"
+          ]
+        ],
+        "id": "C20-A1"
+      }
+    ],
+    "observations": [
+      {
+        "concept": "traçage",
+        "status": "En cours"
+      }
+    ],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  },
+  {
+    "id": "C21",
+    "actions": [
+      {
+        "description": "Envoyer le plan",
+        "assignee": "Léa",
+        "due_date": null,
+        "status": "En cours",
+        "concepts": [
+          [
+            "envoyer",
+            "transmettre",
+            "diffuser",
+            "envoi"
+          ],
+          [
+            "plan"
+          ]
+        ],
+        "id": "C21-A1"
+      }
+    ],
+    "observations": [],
+    "decisions": 0,
+    "issues": 0,
+    "clarification": false
+  }
+]
