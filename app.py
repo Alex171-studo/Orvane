@@ -1,5 +1,3 @@
-import hmac
-
 import streamlit as st
 from pydantic import ValidationError
 from streamlit.errors import StreamlitSecretNotFoundError
@@ -12,6 +10,7 @@ from src.providers.demo_provider import examples
 from src.providers.runtime import CallRuntime
 from src.services.workflow_service import Workflow
 from src.storage.session_repository import SessionRepository
+from src.ui.access import authorized, invitation_form
 from src.ui.pages import NAV, acquisition, action_plan, overview, quality, reports
 from src.ui.styles import brand
 
@@ -32,18 +31,10 @@ except ValidationError:
 
 get_logger("orvane.processing").setLevel("INFO")
 brand()
-if cfg.APP_MODE == "live" and not st.session_state.get("authorized"):
-    with st.form("invitation"):
-        token = st.text_input("Code d’invitation", type="password")
-        if st.form_submit_button("Accéder à ORVANE"):
-            if hmac.compare_digest(
-                token.encode(), cfg.APP_ACCESS_TOKEN.get_secret_value().encode()
-            ):
-                st.session_state.authorized = True
-                st.rerun()
-            st.error("Code d’invitation incorrect.")
+if cfg.APP_MODE == "live" and not authorized(cfg):
+    invitation_form(cfg)
     st.stop()
-if cfg.APP_MODE == "demo":
+if cfg.APP_MODE == "demo" and not authorized(cfg):
     st.sidebar.badge("Mode démonstration", color="blue")
 if "repo" not in st.session_state:
     repo = SessionRepository()
@@ -62,13 +53,12 @@ if "next_note" in st.session_state:
     st.session_state.working_note = st.session_state.pop("next_note")
 nav = st.sidebar.radio("Navigation", NAV, key="nav", label_visibility="collapsed")
 st.sidebar.divider()
-st.sidebar.caption("Données temporaires de session. Exportez votre archive avant de quitter.")
 
 
 def refresh_session(reset):
     runtime.completed.clear()
     for key in list(st.session_state):
-        if key not in ("authorized", "runtime", "repo"):
+        if key not in ("authorized_invitation", "runtime", "repo"):
             del st.session_state[key]
     if reset:
         del st.session_state.repo
@@ -80,6 +70,9 @@ def refresh_session(reset):
 
 try:
     with st.sidebar.expander("Données de session"):
+        st.caption(
+            "L’archive conserve le texte et les rapports. Les vocaux restent dans la session."
+        )
         st.download_button(
             "Exporter la session", repo.export_json(), "orvane-session.json", "application/json"
         )

@@ -17,6 +17,7 @@ from src.services.audio_service import MIMES, validate_audio
 from src.services.extraction_service import FieldIntelligencePipeline
 from src.services.reporting_service import render_pdf
 from src.services.validation_service import normalize, prepare
+from src.ui.access import invitation_configured, provider_button
 from src.ui.editors import editor, parse_rows, review
 from src.ui.styles import metric_grid
 
@@ -100,12 +101,6 @@ def read_audio(upload, cfg, recordings):
     return ext, data
 
 
-def service_hint(cfg, key):
-    if cfg.APP_MODE == "demo":
-        return f'Dans les secrets Streamlit, configurez APP_MODE = "live", APP_ACCESS_TOKEN (24 caractères minimum) et {key}.'
-    return f"Ajoutez {key} dans les secrets Streamlit pour activer ce service."
-
-
 def create_note(repo, wf, cfg, recordings):
     st.subheader("1 · Chantier")
     with st.expander("Ajouter un chantier", expanded=not repo.data.projects):
@@ -156,9 +151,8 @@ def create_note(repo, wf, cfg, recordings):
     else:
         upload = audio_input(source, f"new-{pid}")
         label = "Enregistrer le vocal"
-        st.caption(
-            "Le vocal reste en mémoire dans cette session. L’archive JSON contient uniquement son texte après transcription."
-        )
+        if not cfg.GROQ_API_KEY.get_secret_value().strip() or not invitation_configured(cfg):
+            st.caption("Transcription manuelle uniquement.")
     if st.button(label, type="primary", disabled=not (text or upload)):
         recording = read_audio(upload, cfg, recordings) if upload else None
         if text is not None:
@@ -186,31 +180,26 @@ def recorded_note(w, wf, cfg, runtime, recordings):
         if st.button("Enregistrer le vocal", disabled=not upload):
             recordings[wid] = read_audio(upload, cfg, recordings)
             st.rerun()
-        st.caption("Vous pouvez également saisir la transcription ci-dessous.")
         return
     ext, data = recordings[wid]
-    st.success(
-        f"Vocal enregistré dans cette session · {ext.upper()} · {len(data) / 1_000_000:.2f} Mo"
-    )
     if st.checkbox("Réécouter le vocal", key=f"listen-{wid}"):
         media_type = {"m4a": "audio/mp4", "mp3": "audio/mpeg"}.get(ext, f"audio/{ext}")
         # Inline data stays within the current session; no public media endpoint.
         encoded = b64encode(data).decode("ascii")
         st.html(f'<audio controls src="data:{media_type};base64,{encoded}"></audio>')
-    if w.stage == Stage.NEW:
-        if cfg.APP_MODE == "live" and cfg.GROQ_API_KEY.get_secret_value():
-            if st.button("Confirmer l’envoi à Groq", type="primary"):
-                service = GroqTranscriptionService(cfg, runtime)
-                with st.spinner("Transcription en cours…"):
-                    transcript = service.transcribe(f"note.{ext}", data)
-                wf.transcribe(w, transcript.text, transcript)
-                st.session_state[f"text-{wid}"] = transcript.text
-                st.rerun()
-        else:
-            st.info(
-                "Vous pouvez saisir la transcription ci-dessous. Pour la transcription automatique : "
-                + service_hint(cfg, "GROQ_API_KEY")
-            )
+    if w.stage in (Stage.NEW, Stage.TRANSCRIBED) and w.transcription is None:
+        if provider_button(
+            "Transcrire le vocal",
+            cfg.GROQ_API_KEY,
+            cfg,
+            "Envoyer cet enregistrement à Groq pour transcription.",
+        ):
+            service = GroqTranscriptionService(cfg, runtime)
+            with st.spinner("Transcription en cours…"):
+                transcript = service.transcribe(f"note.{ext}", data)
+            wf.transcribe(w, transcript.text, transcript)
+            st.session_state[f"text-{wid}"] = transcript.text
+            st.rerun()
     if st.button("Effacer le vocal de la session", key=f"clear-audio-{wid}"):
         del recordings[wid]
         st.rerun()
@@ -233,17 +222,10 @@ def acquisition(repo, wf, cfg, runtime):
         create_note(repo, wf, cfg, recordings)
         return
     w = repo.work(wid)
-    st.text(note_label(repo, w))
     if w.note.source_type == "audio":
         recorded_note(w, wf, cfg, runtime, recordings)
-    st.subheader("3 · Transcription")
-    if w.transcription:
-        t = w.transcription
-        st.text(
-            f"Langue : {t.language or 'non renvoyée'} · Durée audio : {t.duration if t.duration is not None else 'non renvoyée'}"
-        )
     value = st.text_area(
-        "Texte à analyser",
+        "Transcription" if w.note.source_type == "audio" else "Texte de la note",
         w.note.text,
         key=f"text-{wid}",
         height=145,
@@ -277,25 +259,18 @@ def acquisition(repo, wf, cfg, runtime):
     if w.stage == Stage.TRANSCRIPT_APPROVED:
         st.subheader("4 · Analyse structurée")
         demo = cfg.APP_MODE == "demo" and w.note.source_type == "demo"
-        if demo and (not original or normalize(w.note.text) != normalize(original)):
-            st.info(
-                "La note corrigée est enregistrée. Restaurez la note d’exemple pour charger sa proposition, ou activez OpenAI pour analyser votre texte."
-            )
+        if demo and normalize(original or "") != normalize(w.note.text):
             return
-        if not demo and (cfg.APP_MODE != "live" or not cfg.OPENAI_API_KEY.get_secret_value()):
-            st.info(
-                "Votre note est enregistrée. Vous pouvez la retrouver dans « Dossier de travail » ou exporter la session. Pour l’analyse IA : "
-                + service_hint(cfg, "OPENAI_API_KEY")
+        if demo:
+            submit = st.button("Charger la proposition", type="primary")
+        else:
+            submit = provider_button(
+                "Analyser la note",
+                cfg.OPENAI_API_KEY,
+                cfg,
+                "Envoyer le texte approuvé à OpenAI pour analyse.",
             )
-            return
-        st.caption(
-            "Extraction préenregistrée pour cette note."
-            if demo
-            else f"Envoi du texte approuvé à OpenAI · {cfg.OPENAI_MODEL} · facturation selon votre compte."
-        )
-        if st.button(
-            "Charger la proposition" if demo else "Confirmer l’analyse OpenAI", type="primary"
-        ):
+        if submit:
             provider = DemoProvider() if demo else OpenAIExtractionService(cfg, runtime)
             with st.spinner("Préparation du compte rendu…"):
                 wf.analyze(w, FieldIntelligencePipeline(provider, cfg))
@@ -450,9 +425,6 @@ def quality(repo, runtime):
     else:
         st.info("Aucun appel fournisseur mesuré.")
     st.subheader("Évaluation annotée")
-    st.caption(
-        "Chargez le rapport produit par scripts/evaluate.py pour consulter les scores du modèle évalué."
-    )
     from src.providers.demo_provider import DATA
     from src.services.evaluation_service import EvaluationReport
 

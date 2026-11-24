@@ -79,7 +79,7 @@ def test_change_invalidates_immediately(demo):
     assert work.stage == Stage.TRANSCRIBED and not work.reports
     click(demo, "Confirmer la transcription corrigée")
     assert "Charger la proposition" not in [b.label for b in demo.button]
-    assert demo.info and work.stage == Stage.TRANSCRIPT_APPROVED
+    assert work.stage == Stage.TRANSCRIPT_APPROVED
 
 
 def test_archive_reset_import(demo):
@@ -138,12 +138,12 @@ def test_auth_audio_analysis_and_rerun(monkeypatch, recording):
     click(app, "Enregistrer le vocal")
     app.run()
     assert not calls
-    click(app, "Confirmer l’envoi à Groq")
+    click(app, "Transcrire le vocal")
     app.run()
     click(app, "Confirmer la transcription corrigée")
     app.run()
     assert calls == ["Groq"]
-    click(app, "Confirmer l’analyse OpenAI")
+    click(app, "Analyser la note")
     app.run()
     assert calls == ["Groq", "OpenAI"]
 
@@ -215,7 +215,8 @@ def test_personal_note_without_keys(demo):
     w = demo.session_state.repo.data.works[0]
     assert w.note.project_id == project.id and w.note.text == "La pompe arrive mercredi."
     assert w.note.source_type == "text" and not w.reports and demo.session_state.runtime.spent == 0
-    assert any("OPENAI_API_KEY" in info.value for info in demo.info)
+    assert button(demo, "Analyser la note").disabled
+    assert not demo.info
 
 
 @pytest.mark.parametrize("method", ["Microphone", "Fichier audio"])
@@ -232,12 +233,12 @@ def test_personal_recording_without_keys(demo, recording, method):
     click(demo, "Enregistrer le vocal")
     w = demo.session_state.repo.data.works[0]
     assert demo.session_state.recordings[w.note.id] == ("wav", recording[1])
-    assert any("GROQ_API_KEY" in info.value for info in demo.info)
-    assert "Confirmer l’envoi à Groq" not in [b.label for b in demo.button]
+    assert button(demo, "Transcrire le vocal").disabled
+    assert not demo.info
     go(demo, 0)
     go(demo, 1)
     demo.selectbox(key="working_note").set_value(w.note.id).run()
-    assert any("Vocal enregistré" in msg.value for msg in demo.success)
+    assert any(box.label == "Réécouter le vocal" for box in demo.checkbox)
     demo.text_area[0].set_value("La visite est terminée.").run()
     click(demo, "Confirmer la transcription corrigée")
     assert w.stage == Stage.TRANSCRIPT_APPROVED and not demo.session_state.runtime.spent
@@ -252,3 +253,51 @@ def test_invalid_upload_does_not_create_note(demo):
     ).run()
     click(demo, "Enregistrer le vocal")
     assert demo.error and not demo.session_state.repo.data.works
+
+
+def test_unlock_saved_recording_with_configured_groq(monkeypatch, recording):
+    token = "session-test-invitation-of-at-least-24-chars"
+    monkeypatch.setenv("APP_MODE", "demo")
+    monkeypatch.setenv("APP_ACCESS_TOKEN", token)
+    monkeypatch.setenv("GROQ_API_KEY", "offline")
+    calls = []
+
+    def transcribe(self, name, data, mime=None):
+        calls.append(data)
+        return Transcript(text="La pompe est arrivée.", language="fr", duration=None, segments=None)
+
+    monkeypatch.setattr(
+        "src.providers.groq_transcription.GroqTranscriptionService.transcribe", transcribe
+    )
+    app = AppTest.from_file(str(APP), default_timeout=20).run()
+    go(app, 1)
+    source(app, "Microphone")
+    app.audio_input[0].upload(*recording).run()
+    click(app, "Enregistrer le vocal")
+    work = app.session_state.repo.data.works[0]
+    assert all(str(work.note.id)[:6] not in node.value for node in app.text)
+    assert not app.info
+    app.text_input[0].set_value("faux")
+    click(app, "Accéder à ORVANE")
+    assert app.error and not calls
+    app.text_input[0].set_value(token)
+    click(app, "Accéder à ORVANE")
+    assert not calls and work.stage == Stage.NEW
+    click(app, "Transcrire le vocal")
+    app.run()
+    assert calls == [recording[1]]
+    assert work.stage == Stage.TRANSCRIBED
+    assert app.text_area[0].value == "La pompe est arrivée."
+
+
+def test_short_invitation_never_unlocks_provider(monkeypatch, recording):
+    monkeypatch.setenv("APP_MODE", "demo")
+    monkeypatch.setenv("APP_ACCESS_TOKEN", "test")
+    monkeypatch.setenv("GROQ_API_KEY", "offline")
+    app = AppTest.from_file(str(APP), default_timeout=20).run()
+    go(app, 1)
+    source(app, "Microphone")
+    app.audio_input[0].upload(*recording).run()
+    click(app, "Enregistrer le vocal")
+    assert button(app, "Transcrire le vocal").disabled
+    assert not app.info and not app.session_state.runtime.spent

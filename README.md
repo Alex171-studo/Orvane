@@ -31,7 +31,7 @@ Ces entrées fonctionnent aussi sans clés. Un vocal enregistré peut être ré�
 
 ## Mode connecté
 
-Copier `.env.example` dans `.env`. Définir `APP_MODE=live`, un `APP_ACCESS_TOKEN` aléatoire d’au moins 24 caractères, et les clés des services utilisés. Un code d’invitation peut être généré avec `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Le saisir dans l’écran d’accès. Sur Community Cloud, utiliser les secrets de l’application.
+Copier `.env.example` dans `.env`. Définir `APP_MODE=live`, un `APP_ACCESS_TOKEN` aléatoire d’au moins 24 caractères, et les clés des services utilisés. Un code d’invitation peut être généré avec `python -c "import secrets; print(secrets.token_urlsafe(32))"`. Le saisir dans l’écran d’accès. Si le site conserve le mode démo, un utilisateur peut ouvrir « Transcrire le vocal · Accès sur invitation » sur sa propre note et saisir ce même code. Le bouton « Transcrire le vocal » envoie ensuite le son à Groq. Le même principe s’applique à l’analyse OpenAI. Les exemples préenregistrés restent hors ligne. Sur Community Cloud, utiliser les secrets de l’application.
 
 | Paramètre | Défaut | Effet |
 |---|---|---|
