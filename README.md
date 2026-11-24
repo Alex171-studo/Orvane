@@ -15,9 +15,15 @@ streamlit run app.py
 
 Ouvrir l’adresse locale affichée par Streamlit. Pour utiliser uniquement l’application, installer `requirements.txt`. Le mode initial fonctionne sans clé.
 
-## Premier compte rendu en démonstration
+## Ajouter une note ou un vocal
 
-1. Dans **Nouveau compte rendu**, choisir l’un des cinq chantiers et ouvrir la note préenregistrée.
+Dans **Nouveau compte rendu**, choisissez un chantier ou utilisez **Ajouter un chantier**. **Texte** est sélectionné par défaut. Saisissez votre note puis cliquez sur **Enregistrer la note**. Pour un vocal, choisissez **Microphone** ou **Fichier audio**, enregistrez ou importez le son, puis cliquez sur **Enregistrer le vocal**. Retrouvez la note dans **Dossier de travail**.
+
+Ces entrées fonctionnent aussi sans clés. Un vocal enregistré peut être réécouté dans la session et transcrit manuellement. Le texte est inclus dans l’archive JSON. Le son reste temporaire et se perd si la session est fermée, réinitialisée ou remplacée par une archive. Le mode connecté permet d’envoyer le son à Groq, puis le texte approuvé à OpenAI par deux actions distinctes.
+
+## Essayer un compte rendu préenregistré
+
+1. Dans **Nouveau compte rendu**, choisir l’un des cinq chantiers fictifs, sélectionner **Note préenregistrée** et ouvrir la note d’exemple.
 2. Lire le texte et confirmer la transcription. Charger la proposition associée au chantier. La démo reconnaît la note fournie, à la normalisation des espaces et des caractères près. L’analyse d’un texte libre requiert le mode connecté.
 3. Comparer les citations à la note. Corriger la synthèse et les tableaux. Pour ajouter une action, compléter une nouvelle ligne dans l’onglet Actions avec sa description, son statut et une citation exacte. Enregistrer ou valider explicitement.
 4. Télécharger le PDF ou le JSON. Le plan d’action et les indicateurs reprennent la dernière révision validée de chaque note. Une modification du suivi ouvre un brouillon à valider.

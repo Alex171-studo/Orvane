@@ -1,3 +1,4 @@
+from base64 import b64encode
 from datetime import date as calendar_date
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -6,14 +7,16 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.domain.errors import AudioValidationError
 from src.domain.models import Project, Stage, now
 from src.providers.demo_provider import DemoProvider, examples
 from src.providers.groq_transcription import GroqTranscriptionService
 from src.providers.openai_extraction import OpenAIExtractionService
 from src.services.analytics_service import corrections, current_reports, indicators
-from src.services.audio_service import MIMES
+from src.services.audio_service import MIMES, validate_audio
 from src.services.extraction_service import FieldIntelligencePipeline
 from src.services.reporting_service import render_pdf
+from src.services.validation_service import normalize, prepare
 from src.ui.editors import editor, parse_rows, review
 from src.ui.styles import metric_grid
 
@@ -76,6 +79,143 @@ def overview(repo):
         )
 
 
+def audio_input(source, key):
+    if source == "Microphone":
+        return st.audio_input("Enregistrer la visite", key=f"mic-{key}")
+    return st.file_uploader("Importer un enregistrement", type=list(MIMES), key=f"file-{key}")
+
+
+def read_audio(upload, cfg, recordings):
+    if upload.size > cfg.MAX_AUDIO_SIZE_MB * 1_000_000:
+        raise AudioValidationError(f"Le vocal dépasse la limite de {cfg.MAX_AUDIO_SIZE_MB} Mo.")
+    if (
+        sum(len(data) for _, data in recordings.values()) + upload.size
+        > 4 * cfg.MAX_AUDIO_SIZE_MB * 1_000_000
+    ):
+        raise AudioValidationError(
+            "La mémoire audio de cette session est pleine. Libérez un vocal déjà traité."
+        )
+    data = upload.getvalue()
+    ext = validate_audio(upload.name, upload.type, data, cfg.MAX_AUDIO_SIZE_MB)
+    return ext, data
+
+
+def service_hint(cfg, key):
+    if cfg.APP_MODE == "demo":
+        return f'Dans les secrets Streamlit, configurez APP_MODE = "live", APP_ACCESS_TOKEN (24 caractères minimum) et {key}.'
+    return f"Ajoutez {key} dans les secrets Streamlit pour activer ce service."
+
+
+def create_note(repo, wf, cfg, recordings):
+    st.subheader("1 · Chantier")
+    with st.expander("Ajouter un chantier", expanded=not repo.data.projects):
+        with st.form("add-project", clear_on_submit=True):
+            name = st.text_input("Nom du chantier")
+            place = st.text_input("Localisation")
+            if st.form_submit_button("Créer le chantier"):
+                project = Project(name=name, location=place, reference_timezone=cfg.APP_TIMEZONE)
+                repo.data.projects.append(project)
+                repo.event(project.id, "project", None, project.model_dump_json())
+                st.session_state.capture_project = project.id
+                st.rerun()
+    if not repo.data.projects:
+        return
+    pid = st.selectbox(
+        "Chantier",
+        [p.id for p in repo.data.projects],
+        key="capture_project",
+        format_func=lambda pid: repo.project(pid).name,
+    )
+    project = repo.project(pid)
+    example = (
+        next((e for e in examples() if e.name == project.name), None)
+        if cfg.APP_MODE == "demo"
+        else None
+    )
+    sources = ["Texte", "Microphone", "Fichier audio"]
+    if example:
+        sources.append("Note préenregistrée")
+    source = st.radio("2 · Source", sources, horizontal=True)
+    sample = source == "Note préenregistrée"
+    tz = ZoneInfo(project.reference_timezone)
+    date = st.date_input(
+        "Date de référence",
+        datetime.fromisoformat(example.reference_datetime).date()
+        if sample
+        else now().astimezone(tz).date(),
+        key=f"date-{pid}-{sample}",
+    )
+    text = None
+    upload = None
+    if sample:
+        text = example.text
+        label = "Ouvrir la note d’exemple"
+    elif source == "Texte":
+        text = st.text_area("Votre note de chantier", max_chars=cfg.MAX_TRANSCRIPT_CHARS)
+        label = "Enregistrer la note"
+    else:
+        upload = audio_input(source, f"new-{pid}")
+        label = "Enregistrer le vocal"
+        st.caption(
+            "Le vocal reste en mémoire dans cette session. L’archive JSON contient uniquement son texte après transcription."
+        )
+    if st.button(label, type="primary", disabled=not (text or upload)):
+        recording = read_audio(upload, cfg, recordings) if upload else None
+        if text is not None:
+            prepare(text, cfg.MAX_TRANSCRIPT_CHARS)
+        work = wf.create(
+            project,
+            datetime.combine(date, time(12), tzinfo=tz),
+            "demo" if sample else "audio" if recording else "text",
+        )
+        if recording:
+            recordings[work.note.id] = recording
+        else:
+            wf.transcribe(work, text)
+        st.session_state.next_note = work.note.id
+        st.rerun()
+
+
+def recorded_note(w, wf, cfg, runtime, recordings):
+    wid = w.note.id
+    if wid not in recordings:
+        if w.stage != Stage.NEW:
+            return
+        choice = st.radio("Entrée audio", ["Microphone", "Fichier audio"], horizontal=True)
+        upload = audio_input(choice, wid)
+        if st.button("Enregistrer le vocal", disabled=not upload):
+            recordings[wid] = read_audio(upload, cfg, recordings)
+            st.rerun()
+        st.caption("Vous pouvez également saisir la transcription ci-dessous.")
+        return
+    ext, data = recordings[wid]
+    st.success(
+        f"Vocal enregistré dans cette session · {ext.upper()} · {len(data) / 1_000_000:.2f} Mo"
+    )
+    if st.checkbox("Réécouter le vocal", key=f"listen-{wid}"):
+        media_type = {"m4a": "audio/mp4", "mp3": "audio/mpeg"}.get(ext, f"audio/{ext}")
+        # Inline data stays within the current session; no public media endpoint.
+        encoded = b64encode(data).decode("ascii")
+        st.html(f'<audio controls src="data:{media_type};base64,{encoded}"></audio>')
+    if w.stage == Stage.NEW:
+        if cfg.APP_MODE == "live" and cfg.GROQ_API_KEY.get_secret_value():
+            if st.button("Confirmer l’envoi à Groq", type="primary"):
+                service = GroqTranscriptionService(cfg, runtime)
+                with st.spinner("Transcription en cours…"):
+                    transcript = service.transcribe(f"note.{ext}", data)
+                wf.transcribe(w, transcript.text, transcript)
+                st.session_state[f"text-{wid}"] = transcript.text
+                st.rerun()
+        else:
+            st.info(
+                "Vous pouvez saisir la transcription ci-dessous. Pour la transcription automatique : "
+                + service_hint(cfg, "GROQ_API_KEY")
+            )
+    if st.button("Effacer le vocal de la session", key=f"clear-audio-{wid}"):
+        del recordings[wid]
+        st.rerun()
+
+
 def acquisition(repo, wf, cfg, runtime):
     st.title(NAV[1])
     if repo.data.works:
@@ -88,83 +228,14 @@ def acquisition(repo, wf, cfg, runtime):
         )
     else:
         wid = None
+    recordings = st.session_state.setdefault("recordings", {})
     if wid is None:
-        st.subheader("1 · Chantier")
-        if cfg.APP_MODE == "live":
-            with st.expander("Ajouter un chantier", expanded=not repo.data.projects):
-                with st.form("add-project"):
-                    name = st.text_input("Nom du chantier")
-                    place = st.text_input("Localisation")
-                    if st.form_submit_button("Créer le chantier"):
-                        project = Project(
-                            name=name, location=place, reference_timezone=cfg.APP_TIMEZONE
-                        )
-                        repo.data.projects.append(project)
-                        repo.event(project.id, "project", None, project.model_dump_json())
-                        st.rerun()
-        if not repo.data.projects:
-            return
-        project = st.selectbox("Chantier", repo.data.projects, format_func=lambda p: p.name)
-        demo = (
-            next((ex for ex in examples() if ex.name == project.name), None)
-            if cfg.APP_MODE == "demo"
-            else None
-        )
-        tz = ZoneInfo(project.reference_timezone)
-        date = st.date_input(
-            "Date de référence",
-            datetime.fromisoformat(demo.reference_datetime).date()
-            if demo
-            else now().astimezone(tz).date(),
-        )
-        source = st.radio(
-            "2 · Source",
-            ["Note préenregistrée"]
-            if cfg.APP_MODE == "demo"
-            else ["Texte", "Microphone", "Fichier audio"],
-            horizontal=True,
-        )
-        if st.button("Ouvrir la note", type="primary"):
-            w = wf.create(
-                project,
-                datetime.combine(date, time(12), tzinfo=tz),
-                "demo" if demo else "text" if source == "Texte" else "audio",
-            )
-            if demo:
-                wf.transcribe(w, demo.text)
-            st.session_state[f"method-{w.note.id}"] = source
-            st.session_state.next_note = w.note.id
-            st.rerun()
+        create_note(repo, wf, cfg, recordings)
         return
     w = repo.work(wid)
     st.text(note_label(repo, w))
-    if w.note.source_type == "audio" and w.stage == Stage.NEW:
-        st.subheader("2 · Note audio")
-        choice = st.radio(
-            "Entrée audio",
-            ["Microphone", "Fichier audio"],
-            index=int(st.session_state.get(f"method-{wid}") == "Fichier audio"),
-            horizontal=True,
-        )
-        file = (
-            st.audio_input("Enregistrer la visite", key=f"mic-{wid}")
-            if choice == "Microphone"
-            else st.file_uploader("Importer un enregistrement", type=list(MIMES), key=f"file-{wid}")
-        )
-        if st.button(
-            "Confirmer l’envoi à Groq", disabled=not file or cfg.APP_MODE != "live", type="primary"
-        ):
-            if file.size > cfg.MAX_AUDIO_SIZE_MB * 1_000_000:
-                from src.domain.errors import AudioValidationError
-
-                raise AudioValidationError("Enregistrement trop volumineux.")
-            service = GroqTranscriptionService(cfg, runtime)
-            with st.spinner("Transcription en cours…"):
-                transcript = service.transcribe(file.name, file.getvalue(), file.type)
-            wf.transcribe(w, transcript.text, transcript)
-            st.rerun()
-    if w.stage == Stage.NEW and w.note.source_type == "audio":
-        return
+    if w.note.source_type == "audio":
+        recorded_note(w, wf, cfg, runtime, recordings)
     st.subheader("3 · Transcription")
     if w.transcription:
         t = w.transcription
@@ -197,13 +268,26 @@ def acquisition(repo, wf, cfg, runtime):
             st.warning(
                 "Cette modification invalide la proposition en cours. Les révisions validées restent consultables."
             )
-        if st.button("Confirmer la transcription corrigée", type="primary"):
+        if st.button(
+            "Confirmer la transcription corrigée", type="primary", disabled=not value.strip()
+        ):
             wf.approve(w)
             st.rerun()
         return
     if w.stage == Stage.TRANSCRIPT_APPROVED:
         st.subheader("4 · Analyse structurée")
-        demo = cfg.APP_MODE == "demo"
+        demo = cfg.APP_MODE == "demo" and w.note.source_type == "demo"
+        if demo and (not original or normalize(w.note.text) != normalize(original)):
+            st.info(
+                "La note corrigée est enregistrée. Restaurez la note d’exemple pour charger sa proposition, ou activez OpenAI pour analyser votre texte."
+            )
+            return
+        if not demo and (cfg.APP_MODE != "live" or not cfg.OPENAI_API_KEY.get_secret_value()):
+            st.info(
+                "Votre note est enregistrée. Vous pouvez la retrouver dans « Dossier de travail » ou exporter la session. Pour l’analyse IA : "
+                + service_hint(cfg, "OPENAI_API_KEY")
+            )
+            return
         st.caption(
             "Extraction préenregistrée pour cette note."
             if demo

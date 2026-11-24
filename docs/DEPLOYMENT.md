@@ -18,7 +18,7 @@ git push -u origin main
 1. Connecter le compte GitHub à Streamlit Community Cloud, puis choisir **Create app**.
 2. Sélectionner le dépôt, la branche `main` et `app.py`. Si ORVANE fait partie d’un dépôt plus grand, adapter le chemin au point d’entrée et vérifier la découverte des dépendances et de la configuration Streamlit.
 3. Dans **Advanced settings**, sélectionner Python 3.12. Utiliser les paramètres de secrets ci-dessous si le mode connecté est souhaité.
-4. Déployer. Ouvrir l’URL fournie et vérifier l’accueil puis le parcours complet. La configuration par défaut lance la démonstration sans aucune clé. [Procédure officielle Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy)
+4. Déployer. Ouvrir l’URL fournie et vérifier l’accueil puis le parcours complet. Sans clé, vérifier que **Nouveau compte rendu** propose **Texte**, **Microphone** et **Fichier audio**, puis enregistrer une note personnelle. Les exemples préenregistrés sont une quatrième option sur les chantiers fictifs. [Procédure officielle Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy)
 
 ## Configurer Groq et OpenAI
 
