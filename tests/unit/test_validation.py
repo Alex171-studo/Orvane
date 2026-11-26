@@ -11,6 +11,8 @@ from src.services.validation_service import prepare, resolve_date
     "value,day",
     [
         ("demain", 2),
+        ("vendredi", 2),
+        ("jeudi", None),
         ("dans 2 jours", 3),
         ("le 03/01/2026", 3),
         ("2026-01-04", 4),

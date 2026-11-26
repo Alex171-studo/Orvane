@@ -36,6 +36,10 @@ def resolve_date(expression: str | None, reference: date) -> date | None:
     offsets = {"aujourd'hui": 0, "demain": 1, "après-demain": 2}
     if word in offsets:
         return reference + timedelta(days=offsets[word])
+    weekdays = "lundi mardi mercredi jeudi vendredi samedi dimanche".split()
+    if word in weekdays:
+        offset = (weekdays.index(word) - reference.weekday()) % 7
+        return reference + timedelta(days=offset) if offset else None
     match = re.fullmatch(r"dans (\d{1,3}) jours?", word)
     if match:
         return reference + timedelta(days=int(match[1]))

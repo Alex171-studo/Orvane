@@ -20,11 +20,11 @@ Un enregistrement ou un fichier importé passe du navigateur à la mémoire du s
 
 La méthode `FieldIntelligencePipeline.analyze(transcript, project_context, reference_datetime)` prépare le texte, appelle le fournisseur configuré et matérialise une `ExtractionResult`. Le SDK OpenAI construit le schéma strict depuis `Proposal`. L’adaptateur examine le statut de complétion avant de laisser le helper parser la réponse, afin de distinguer une limite de sortie et un résultat mal formé. Les UUID sont attribués en Python. Les indices de relations sont vérifiés avant leur conversion en identifiants.
 
-La correction d’une transcription invalide son approbation et le brouillon associé. Un rapport publié garde sa propre copie du texte source. Modifier son contenu ou une action crée une nouvelle révision en revue. Une validation explicite publie la version et détermine les données visibles dans le pilotage. Le journal conserve les valeurs avant/après des corrections dans la session privée.
+La correction d’une transcription invalide son approbation et le brouillon associé. Un rapport publié garde sa propre copie du texte source. Modifier son contenu ou une action crée une nouvelle révision en revue. Une validation explicite publie la version. Le journal conserve les valeurs avant/après des corrections dans la session privée.
 
 ## Mesures
 
-Les rapports validés sont dénombrés par note. Les problèmes ouverts possèdent un indicateur éditable. Une action ouverte a un statut différent de « Terminée ». Une action ouverte est en retard quand sa date d’échéance précède le jour courant du chantier. La durée moyenne affichée porte sur les tentatives fournisseur réussies et observées. Le modèle retourné par OpenAI, l’identifiant de requête et les tokens sont conservés quand ils sont disponibles.
+Les rapports validés sont dénombrés par note. Les problèmes ouverts possèdent un indicateur éditable. Une action ouverte a un statut différent de « Terminée ». Une action ouverte est en retard quand sa date d’échéance précède le jour courant du chantier. La durée moyenne calculée porte sur les tentatives fournisseur réussies et observées. Le modèle retourné par OpenAI, l’identifiant de requête et les tokens sont conservés quand ils sont disponibles.
 
 Le taux de correction mesure la part des éléments proposés (synthèses comprises) touchés par une modification ou suppression. Une création manuelle compte dans le volume de corrections. Plusieurs éditions du même élément initial ne multiplient pas le numérateur du taux.
 

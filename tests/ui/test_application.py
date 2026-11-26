@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from src.domain.errors import ExtractionError
 from src.domain.models import Stage, Transcript
-from src.providers.demo_provider import DATA, examples
-from src.ui.pages import NAV
 
 APP = Path(__file__).resolve().parents[2] / "app.py"
+GENERATE = "Confirmer et générer le compte rendu"
 
 
 def button(app, label):
@@ -21,21 +21,18 @@ def click(app, label):
     assert not app.exception
 
 
-@pytest.fixture
-def demo(monkeypatch):
-    monkeypatch.setenv("APP_MODE", "demo")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    return AppTest.from_file(str(APP), default_timeout=20).run()
-
-
-def go(app, index):
-    app.radio(key="nav").set_value(NAV[index]).run()
+def start():
+    app = AppTest.from_file(str(APP), default_timeout=20).run()
     assert not app.exception
+    return app
 
 
-def source(app, value):
-    next(r for r in app.radio if r.label == "2 · Source").set_value(value).run()
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("APP_MODE", "live")
+    monkeypatch.setenv("APP_ACCESS_TOKEN", "abcd")
 
 
 @pytest.fixture
@@ -47,257 +44,171 @@ def recording():
     return ("visite.wav", output.getvalue(), "audio/wav")
 
 
-def begin(app):
-    go(app, 1)
-    source(app, "Note préenregistrée")
-    click(app, "Ouvrir la note d’exemple")
-    click(app, "Confirmer la transcription corrigée")
-    click(app, "Charger la proposition")
-
-
-def test_demo_end_to_end(demo):
-    assert len(demo.session_state.repo.data.projects) == 5
-    begin(demo)
-    synthesis = next(x for x in demo.text_area if x.label == "Synthèse opérationnelle")
-    synthesis.set_value("Synthèse revue par le conducteur.")
-    click(demo, "Enregistrer les modifications")
-    click(demo, "Valider le compte rendu")
-    w = demo.session_state.repo.data.works[0]
-    assert w.stage == Stage.VALIDATED and w.reports[0].extraction.summary.startswith(
-        "Synthèse revue"
-    )
-    for i in [2, 3, 4, 0]:
-        go(demo, i)
-    assert any("Rapports validés</dt><dd>1</dd>" in node.proto.body for node in demo.get("html"))
-    assert not demo.session_state.repo.data.metrics and not demo.session_state.runtime.spent
-
-
-def test_change_invalidates_immediately(demo):
-    begin(demo)
-    demo.text_area[0].set_value("Nouvelle note corrigée.").run()
-    work = demo.session_state.repo.data.works[0]
-    assert work.stage == Stage.TRANSCRIBED and not work.reports
-    click(demo, "Confirmer la transcription corrigée")
-    assert "Charger la proposition" not in [b.label for b in demo.button]
-    assert work.stage == Stage.TRANSCRIPT_APPROVED
-
-
-def test_archive_reset_import(demo):
-    begin(demo)
-    click(demo, "Valider le compte rendu")
-    archive = demo.session_state.repo.export_json()
-    demo.session_state.runtime.spent = 3
-    demo.checkbox[0].check().run()
-    click(demo, "Réinitialiser")
-    assert not demo.session_state.repo.data.works and demo.session_state.runtime.spent == 3
-    demo.file_uploader(key="archive").upload("session.json", archive, "application/json").run()
-    click(demo, "Remplacer par l’archive")
-    assert demo.session_state.repo.data.works[0].stage == Stage.VALIDATED
-    assert demo.session_state.runtime.spent == 3
-
-
-def test_auth_audio_analysis_and_rerun(monkeypatch, recording):
-    invitation = "offline-example-invitation-12345"
-    monkeypatch.setenv("APP_MODE", "live")
-    monkeypatch.setenv("APP_ACCESS_TOKEN", invitation)
-    monkeypatch.setenv("OPENAI_API_KEY", "offline")
-    monkeypatch.setenv("GROQ_API_KEY", "offline")
+@pytest.fixture
+def extraction(monkeypatch, session):
+    monkeypatch.setenv("OPENAI_API_KEY", "offline-test")
+    sample = session[3]
     calls = []
-    example = examples()[0]
-
-    def transcribe(self, name, data, mime=None):
-        assert data == recording[1]
-        calls.append("Groq")
-        return Transcript(text=example.text, language=None, duration=None, segments=None)
 
     def extract(self, source, context, reference):
-        calls.append("OpenAI")
-        return example.proposal
+        calls.append(source)
+        return sample.proposal
+
+    monkeypatch.setattr("src.providers.openai_extraction.OpenAIExtractionService.extract", extract)
+    return sample, calls
+
+
+def enter(app, text):
+    app.text_input[0].set_value("Résidence Horizon")
+    app.text_area[0].set_value(text).run()
+
+
+def test_blank_workspace_and_archive():
+    app = start()
+    assert not app.session_state.repo.data.projects
+    assert app.text_area[0].value == app.text_input[0].value == ""
+    enter(app, "La visite est terminée.")
+    assert button(app, GENERATE).disabled
+    click(app, "Enregistrer la note")
+    repo = app.session_state.repo
+    assert len(repo.data.works) == 1
+    archive = repo.export_json()
+    app.session_state.runtime.spent = 3
+    app.checkbox[0].check().run()
+    click(app, "Effacer la session")
+    assert not app.session_state.repo.data.works and app.session_state.runtime.spent == 3
+    app.file_uploader(key="archive").upload("session.json", archive, "application/json").run()
+    click(app, "Remplacer la session par l’archive")
+    click(app, next(x.label for x in app.button if x.label.startswith("Résidence Horizon")))
+    assert app.text_area[0].value == "La visite est terminée."
+    click(app, "Nouvelle note")
+    assert not app.text_area[0].value
+    assert len(app.session_state.repo.data.projects) == 1
+
+
+@pytest.mark.parametrize("source", ["Microphone", "Fichier audio"])
+def test_audio_to_validated_pdf(monkeypatch, extraction, recording, source):
+    sample, calls = extraction
+    monkeypatch.setenv("GROQ_API_KEY", "offline")
+    monkeypatch.setenv("APP_MODE", "demo")
+
+    def transcribe(self, filename, data, mime):
+        assert data == recording[1] and mime == recording[2]
+        calls.append("audio")
+        return Transcript(text=sample.text, language=None, duration=None, segments=None)
 
     monkeypatch.setattr(
         "src.providers.groq_transcription.GroqTranscriptionService.transcribe", transcribe
     )
-    monkeypatch.setattr("src.providers.openai_extraction.OpenAIExtractionService.extract", extract)
-    app = AppTest.from_file(str(APP), default_timeout=20).run()
-    assert not app.radio
-    app.text_input[0].set_value("wrong")
-    click(app, "Accéder à ORVANE")
-    assert app.error
-    app.text_input[0].set_value(invitation)
-    click(app, "Accéder à ORVANE")
-    go(app, 1)
-    app.text_input[0].set_value(example.name)
-    app.text_input[1].set_value(example.location)
-    click(app, "Créer le chantier")
-    source(app, "Microphone")
-    assert len(app.audio_input) == 1
-    source(app, "Fichier audio")
-    next(f for f in app.file_uploader if f.label == "Importer un enregistrement").upload(
-        *recording
-    ).run()
-    click(app, "Enregistrer le vocal")
-    app.run()
-    assert not calls
+    app = start()
+    app.radio[0].set_value(source).run()
+    widget = app.audio_input[0] if source == "Microphone" else app.file_uploader(key="capture-file")
+    widget.upload(*recording).run()
+    assert not calls and not app.text_area
     click(app, "Transcrire le vocal")
     app.run()
-    click(app, "Confirmer la transcription corrigée")
+    assert calls == ["audio"] and app.text_area[0].value == sample.text
+    corrected = sample.text + " La visite est close."
+    app.text_area[0].set_value(corrected).run()
+    click(app, GENERATE)
     app.run()
-    assert calls == ["Groq"]
-    click(app, "Analyser la note")
-    app.run()
-    assert calls == ["Groq", "OpenAI"]
+    assert calls == ["audio", corrected]
+    work = app.session_state.repo.data.works[0]
+    assert work.stage == Stage.IN_REVIEW and work.transcription.text == sample.text
+    assert not any("PDF" in x.label for x in app.get("download_button"))
+    app.text_area[1].set_value("Synthèse relue sur place.")
+    click(app, "Valider le compte rendu")
+    assert (
+        work.stage == Stage.VALIDATED
+        and work.reports[0].extraction.summary == "Synthèse relue sur place."
+    )
+    assert any("PDF validé" in x.label for x in app.get("download_button"))
+    assert calls == ["audio", corrected]
 
 
-def test_quality_upload(demo):
-    go(demo, 4)
-    next(x for x in demo.file_uploader if x.label.startswith("Rapport")).upload(
-        "eval.json", (DATA / "evaluation/replay_report.json").read_bytes(), "application/json"
-    ).run()
-    assert not demo.exception and demo.dataframe
-
-
-def test_action_plan_edit_creates_pending_revision(demo):
-    begin(demo)
-    click(demo, "Valider le compte rendu")
-    go(demo, 2)
-    work = demo.session_state.repo.data.works[0]
-    key = f"plan-None-{len(demo.session_state.repo.data.audit)}-actions"
-    demo.session_state[key] = {
-        "edited_rows": {0: {"status": "Terminée"}},
-        "added_rows": [],
-        "deleted_rows": [],
-    }
-    click(demo, "Enregistrer le suivi")
-    assert work.stage == Stage.IN_REVIEW
-    assert work.reports[0].extraction.actions[0].status.value == "À faire"
-    assert work.reports[1].extraction.actions[0].status.value == "Terminée"
-    go(demo, 3)
-    click(demo, "Valider le compte rendu")
-    go(demo, 0)
-    assert any("Actions ouvertes</dt><dd>0</dd>" in node.proto.body for node in demo.get("html"))
-
-
-def test_review_add_then_delete_action(demo):
-    begin(demo)
-    repo = demo.session_state.repo
+def test_write_edit_revision(extraction):
+    sample, calls = extraction
+    app = start()
+    enter(app, sample.text)
+    click(app, GENERATE)
+    repo = app.session_state.repo
     work = repo.data.works[0]
-    report = work.reports[0]
+    click(app, "Valider le compte rendu")
 
-    def key():
-        return f"review-{report.id}-{len(repo.data.audit)}actions"
+    app.toggle[0].set_value(True).run()
 
+    def edit_action(edited=None, added=None, deleted=None):
+        key = f"review-{work.reports[-1].id}-{len(repo.data.audit)}actions"
+        app.session_state[key] = {
+            "edited_rows": edited or {},
+            "added_rows": added or [],
+            "deleted_rows": deleted or [],
+        }
+        click(app, "Enregistrer les modifications")
+
+    edit_action({0: {"status": "Terminée"}})
+    assert work.stage == Stage.IN_REVIEW and len(work.reports) == 2
+    assert work.reports[0].extraction.actions[0].status == "À faire"
+    assert work.reports[1].extraction.actions[0].status == "Terminée"
     added = {
-        "description": "Confirmer le maintien de l’accès",
-        "source_excerpt": report.extraction.decisions[0].source_excerpt,
+        "description": "Prévenir le responsable",
+        "source_excerpt": sample.proposal.actions[0].source_excerpt,
         "requires_review": True,
         "status": "À faire",
     }
-    demo.session_state[key()] = {"edited_rows": {}, "added_rows": [added], "deleted_rows": []}
-    click(demo, "Enregistrer les modifications")
-    assert len(report.extraction.actions) == 2 and report.extraction.actions[1].assignee is None
-    demo.session_state[key()] = {"edited_rows": {}, "added_rows": [], "deleted_rows": [0]}
-    click(demo, "Enregistrer les modifications")
-    assert [a.description for a in report.extraction.actions] == [added["description"]]
-    assert repo.data.audit[-1].event_type == "entity_edit" and repo.data.audit[-1].after is None
+    edit_action(added=[added])
+    assert len(work.reports[-1].extraction.actions) == 2
+    edit_action(deleted=[0])
+    assert work.reports[-1].extraction.actions[0].description == added["description"]
+    click(app, "Valider le compte rendu")
+    assert len(app.selectbox[0].options) == 2
+    app.text_area[0].set_value("Une autre note.").run()
+    assert work.stage == Stage.TRANSCRIBED and work.reports[-1].source_text == sample.text
+    assert calls == [sample.text]
 
 
-def test_personal_note_without_keys(demo):
-    go(demo, 1)
-    demo.text_input[0].set_value("Mon chantier")
-    demo.text_input[1].set_value("Rouen")
-    click(demo, "Créer le chantier")
-    project = demo.session_state.repo.data.projects[-1]
-    assert demo.selectbox(key="capture_project").value == project.id
-    assert next(r for r in demo.radio if r.label == "2 · Source").value == "Texte"
-    demo.text_area[0].set_value("La pompe arrive mercredi.").run()
-    click(demo, "Enregistrer la note")
-    click(demo, "Confirmer la transcription corrigée")
-    w = demo.session_state.repo.data.works[0]
-    assert w.note.project_id == project.id and w.note.text == "La pompe arrive mercredi."
-    assert w.note.source_type == "text" and not w.reports and demo.session_state.runtime.spent == 0
-    assert button(demo, "Analyser la note").disabled
-    assert not demo.info
+def test_provider_failure_retry_and_source_change(monkeypatch, extraction):
+    sample, _ = extraction
+    attempts = []
+
+    def extract(self, source, context, reference):
+        attempts.append(source)
+        if len(attempts) == 1:
+            raise ExtractionError("Service indisponible.")
+        return sample.proposal
+
+    monkeypatch.setattr("src.providers.openai_extraction.OpenAIExtractionService.extract", extract)
+    app = start()
+    enter(app, sample.text)
+    click(app, GENERATE)
+    assert app.error and app.text_area[0].value == sample.text
+    app.run()
+    assert len(attempts) == 1
+    click(app, GENERATE)
+    (work,) = app.session_state.repo.data.works
+    assert len(work.reports) == 1
+    app.text_area[0].set_value("La livraison arrive.").run()
+    assert work.stage == Stage.TRANSCRIBED and not work.reports
 
 
-@pytest.mark.parametrize("method", ["Microphone", "Fichier audio"])
-def test_personal_recording_without_keys(demo, recording, method):
-    go(demo, 1)
-    source(demo, method)
-    widget = (
-        demo.audio_input[0]
-        if method == "Microphone"
-        else next(f for f in demo.file_uploader if f.label == "Importer un enregistrement")
-    )
-    widget.upload(*recording).run()
-    assert not demo.session_state.repo.data.works
-    click(demo, "Enregistrer le vocal")
-    w = demo.session_state.repo.data.works[0]
-    assert demo.session_state.recordings[w.note.id] == ("wav", recording[1])
-    assert button(demo, "Transcrire le vocal").disabled
-    assert not demo.info
-    go(demo, 0)
-    go(demo, 1)
-    demo.selectbox(key="working_note").set_value(w.note.id).run()
-    assert any(box.label == "Réécouter le vocal" for box in demo.checkbox)
-    demo.text_area[0].set_value("La visite est terminée.").run()
-    click(demo, "Confirmer la transcription corrigée")
-    assert w.stage == Stage.TRANSCRIPT_APPROVED and not demo.session_state.runtime.spent
-    assert not AppTest.from_file(str(APP), default_timeout=20).run().session_state.repo.data.works
-
-
-def test_invalid_upload_does_not_create_note(demo):
-    go(demo, 1)
-    source(demo, "Fichier audio")
-    next(f for f in demo.file_uploader if f.label == "Importer un enregistrement").upload(
-        "faux.wav", b"not audio", "audio/wav"
-    ).run()
-    click(demo, "Enregistrer le vocal")
-    assert demo.error and not demo.session_state.repo.data.works
-
-
-def test_unlock_saved_recording_with_configured_groq(monkeypatch, recording):
-    token = "session-test-invitation-of-at-least-24-chars"
-    monkeypatch.setenv("APP_MODE", "demo")
-    monkeypatch.setenv("APP_ACCESS_TOKEN", token)
+def test_audio_only_invalid_and_retry(monkeypatch, recording):
     monkeypatch.setenv("GROQ_API_KEY", "offline")
-    calls = []
+    app = start()
+    app.radio[0].set_value("Fichier audio").run()
+    app.file_uploader(key="capture-file").upload("invalide.wav", b"invalide", "audio/wav").run()
+    click(app, "Transcrire le vocal")
+    assert app.error and app.session_state.runtime.spent == 0
 
-    def transcribe(self, name, data, mime=None):
-        calls.append(data)
-        return Transcript(text="La pompe est arrivée.", language="fr", duration=None, segments=None)
+    def transcribe(self, filename, data, mime):
+        return Transcript(
+            text="La visite est terminée.", language=None, duration=None, segments=None
+        )
 
     monkeypatch.setattr(
         "src.providers.groq_transcription.GroqTranscriptionService.transcribe", transcribe
     )
-    app = AppTest.from_file(str(APP), default_timeout=20).run()
-    go(app, 1)
-    source(app, "Microphone")
-    app.audio_input[0].upload(*recording).run()
-    click(app, "Enregistrer le vocal")
-    work = app.session_state.repo.data.works[0]
-    assert all(str(work.note.id)[:6] not in node.value for node in app.text)
-    assert not app.info
-    app.text_input[0].set_value("faux")
-    click(app, "Accéder à ORVANE")
-    assert app.error and not calls
-    app.text_input[0].set_value(token)
-    click(app, "Accéder à ORVANE")
-    assert not calls and work.stage == Stage.NEW
+    app.file_uploader(key="capture-file").upload(*recording).run()
     click(app, "Transcrire le vocal")
-    app.run()
-    assert calls == [recording[1]]
-    assert work.stage == Stage.TRANSCRIBED
-    assert app.text_area[0].value == "La pompe est arrivée."
-
-
-def test_short_invitation_never_unlocks_provider(monkeypatch, recording):
-    monkeypatch.setenv("APP_MODE", "demo")
-    monkeypatch.setenv("APP_ACCESS_TOKEN", "test")
-    monkeypatch.setenv("GROQ_API_KEY", "offline")
-    app = AppTest.from_file(str(APP), default_timeout=20).run()
-    go(app, 1)
-    source(app, "Microphone")
-    app.audio_input[0].upload(*recording).run()
-    click(app, "Enregistrer le vocal")
-    assert button(app, "Transcrire le vocal").disabled
-    assert not app.info and not app.session_state.runtime.spent
+    assert button(app, GENERATE).disabled
+    click(app, "Enregistrer la note")
+    assert app.session_state.repo.data.works[0].note.text == "La visite est terminée."

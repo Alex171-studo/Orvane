@@ -23,7 +23,7 @@ MODELS = dict(zip(SECTIONS, (Observation, Issue, ActionItem, Decision, Clarifica
 LABELS = {
     "observations": "Avancement et observations",
     "issues": "Problèmes",
-    "actions": "Actions",
+    "actions": "Plan d’action",
     "decisions": "Décisions",
     "clarifications": "Points à clarifier",
 }
@@ -60,7 +60,9 @@ def editor(section, items, key, changed, validated=False, projects=None):
     rows = []
     for item in items:
         row = item.model_dump(mode="json")
-        row["review"] = "Validé" if validated else "Modifié" if item.id in changed else "Proposé"
+        row["review"] = (
+            "Validé" if validated else "Modifié" if item.id in changed else "Proposé par l’IA"
+        )
         if projects:
             row["project"] = projects[item.id]
         if isinstance(item, ActionItem):
@@ -138,21 +140,12 @@ def review(repo, wf, w):
     changed = {
         e.entity_id for e in repo.data.audit if e.event_type in ("entity_edit", "summary_edit")
     }
-    st.subheader(f"Revue du compte rendu · R{report.revision}")
-    st.caption(
-        "VALIDÉ"
-        if report.status == "validated"
-        else "PROPOSÉ PAR L’IA"
-        if w.note.source_type != "demo"
-        else "PROPOSITION PRÉENREGISTRÉE"
+    st.subheader(
+        f"Version {report.revision} · "
+        + ("Validée" if report.status == "validated" else "À valider")
     )
-    with st.expander("Consulter la note approuvée"):
-        st.text(report.source_text)
     if report.id in changed:
         st.caption("MODIFIÉ · Synthèse corrigée")
-    needs = sum(
-        bool(getattr(i, "requires_review", False)) for sec in SECTIONS for i in getattr(result, sec)
-    )
     source = normalize(report.source_text)
     missing = [
         f"{LABELS[name]} · ligne {n}"
@@ -162,20 +155,24 @@ def review(repo, wf, w):
     ]
     if missing:
         st.error("Citations à corriger avant validation : " + ", ".join(missing))
-    if needs:
-        st.warning(
-            f"À VÉRIFIER · {needs} élément(s). Les valeurs inconnues peuvent rester vides après revue."
-        )
-    if any(a.linked_issue_id for a in result.actions) or any(
-        c.related_entity_id for c in result.clarifications
-    ):
-        st.caption("Supprimer un élément détache aussi ses liens dans cette révision.")
+    cols = st.columns(3)
+    flagged = {
+        i.id
+        for sec in SECTIONS
+        for i in getattr(result, sec)
+        if getattr(i, "requires_review", False)
+    }
+    extra = sum(c.related_entity_id not in flagged for c in result.clarifications)
+    cols[0].metric("Actions", len(result.actions))
+    cols[1].metric("Points à vérifier", len(flagged) + extra)
+    cols[2].metric("Actions terminées", sum(a.status == Status.DONE for a in result.actions))
+    order = ("actions", "observations", "issues", "decisions", "clarifications")
     key = f"review-{report.id}-{len(repo.data.audit)}"
     with st.form(key):
         summary = st.text_area("Synthèse opérationnelle", result.summary)
-        tabs = st.tabs([LABELS[s] + f" ({len(getattr(result, s))})" for s in SECTIONS])
+        tabs = st.tabs([LABELS[s] + f" ({len(getattr(result, s))})" for s in order])
         frames = {}
-        for section, tab in zip(SECTIONS, tabs, strict=True):
+        for section, tab in zip(order, tabs, strict=True):
             with tab:
                 frames[section] = editor(
                     section,
@@ -201,3 +198,44 @@ def review(repo, wf, w):
         if validate:
             wf.validate(w)
         st.rerun()
+
+
+def read_report(result):
+    st.subheader("Synthèse validée")
+    st.text(result.summary)
+    st.subheader("Plan d’action")
+    if result.actions:
+        st.dataframe(
+            [
+                {
+                    "Action": a.description,
+                    "Responsable": a.assignee or "À désigner",
+                    "Échéance": a.due_date.strftime("%d/%m/%Y") if a.due_date else "À définir",
+                    "Priorité": a.priority or "À confirmer",
+                    "Statut": a.status,
+                }
+                for a in result.actions
+            ],
+            hide_index=True,
+            width="stretch",
+        )
+    else:
+        st.caption("Aucune action consignée.")
+    for section in ("observations", "issues", "decisions", "clarifications"):
+        items = getattr(result, section)
+        if items:
+            st.subheader(LABELS[section])
+            for item in items:
+                if section == "clarifications":
+                    st.text(f"{item.question} {item.reason}")
+                elif section == "observations":
+                    st.text(f"{item.work_status} · {item.description}")
+                else:
+                    st.text(item.description)
+    with st.expander("Sources et points à vérifier"):
+        for section in SECTIONS:
+            for item in getattr(result, section):
+                flagged = getattr(item, "requires_review", section == "clarifications")
+                label = getattr(item, "description", None) or item.question
+                st.text(f"{label}" + (" · À vérifier" if flagged else ""))
+                st.text(f"« {item.source_excerpt} »")

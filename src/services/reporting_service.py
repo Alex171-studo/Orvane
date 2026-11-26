@@ -160,8 +160,26 @@ def render_pdf(report, project):
     section(
         "Informations à clarifier",
         [c.question + " " + c.reason for c in data.clarifications]
-        + [f"Action à vérifier · {a.description}" for a in data.actions if a.requires_review],
+        + [
+            item.description
+            for group in (data.actions, data.observations, data.issues, data.decisions)
+            for item in group
+            if item.requires_review
+        ],
     )
+
+    evidence = [
+        f"{label} {index} · « {item.source_excerpt} »"
+        for label, items in (
+            ("Action", data.actions),
+            ("Observation", data.observations),
+            ("Problème", data.issues),
+            ("Décision", data.decisions),
+        )
+        for index, item in enumerate(items, 1)
+    ]
+    if evidence:
+        section("Extraits de la note", evidence)
 
     def furniture(canvas, document):
         width, height = A4

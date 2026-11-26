@@ -1,0 +1,48 @@
+{
+  "name": "Chantier unitaire",
+  "location": "Lille",
+  "text": "La dalle du hall A est coulée. Le treuil de la zone nord est immobilisé. Karim doit appeler le loueur demain. Le maintien de l’accès sud est validé.",
+  "reference_datetime": "2026-11-23T09:00:00+01:00",
+  "proposal": {
+    "summary": "La dalle du hall A est coulée. Le treuil de la zone nord est immobilisé.",
+    "observations": [
+      {
+        "description": "La dalle du hall A est coulée.",
+        "category": "Avancement",
+        "work_status": "Terminé",
+        "source_excerpt": "La dalle du hall A est coulée.",
+        "requires_review": false
+      }
+    ],
+    "issues": [
+      {
+        "title": "Le treuil de la zone nord est immobilisé.",
+        "description": "Le treuil de la zone nord est immobilisé.",
+        "severity": null,
+        "operational_impact": null,
+        "source_excerpt": "Le treuil de la zone nord est immobilisé.",
+        "requires_review": true
+      }
+    ],
+    "actions": [
+      {
+        "description": "Appeler le loueur",
+        "assignee": "Karim",
+        "priority": null,
+        "status": "À faire",
+        "due_expression": "demain",
+        "issue_index": null,
+        "source_excerpt": "Karim doit appeler le loueur demain.",
+        "requires_review": true
+      }
+    ],
+    "decisions": [
+      {
+        "description": "Le maintien de l’accès sud est validé.",
+        "source_excerpt": "Le maintien de l’accès sud est validé.",
+        "requires_review": false
+      }
+    ],
+    "clarifications": []
+  }
+}

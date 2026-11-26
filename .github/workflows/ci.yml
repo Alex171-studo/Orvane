@@ -5,8 +5,6 @@ permissions:
 jobs:
   verification:
     runs-on: ubuntu-latest
-    env:
-      APP_MODE: demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

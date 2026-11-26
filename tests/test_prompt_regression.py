@@ -51,20 +51,6 @@ def test_paraphrase_one_to_one(reviewed):
     assert report.scores["echecs_parsing"] == 1 and report.scores["input_tokens"] is None
 
 
-def test_bundled_fixture_report_is_reproducible():
-    from src.config.settings import Settings
-    from src.providers.demo_provider import DATA
-    from src.services.evaluation_service import EvaluationReport, replay_demo
-
-    report = replay_demo(Settings())
-    stored = EvaluationReport.model_validate_json(
-        (DATA / "evaluation/replay_report.json").read_bytes()
-    )
-    assert report.scores == stored.scores
-    assert [c.counts for c in report.cases] == [c.counts for c in stored.cases]
-    assert report.source == "fixtures" and report.scores["latence_moyenne_ms"] is None
-
-
 def test_released_prompt_snapshots():
     import hashlib
 

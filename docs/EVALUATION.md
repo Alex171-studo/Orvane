@@ -23,11 +23,10 @@ Un dénominateur nul est représenté par null. Un échec garde les actions atte
 
 ```bash
 python scripts/evaluate.py
-python scripts/evaluate.py --demo --output evaluation-results-demo.json
 python scripts/evaluate.py --predictions predictions.json --output evaluation-results-offline.json
 ```
 
-Le premier appel contrôle l’inventaire. Le deuxième rejoue les cinq fixtures du produit avec des cibles distinctes dans `demo_targets.json`. Le rapport livré dans `data/evaluation/replay_report.json` et l’écran Qualité IA présentent cette vérification hors ligne. Les résultats concernent exclusivement ces fixtures. Le troisième appel accepte une table JSON associant les identifiants C01 à C21 à des ExtractionResult sérialisés.
+La première commande contrôle l’inventaire. La seconde accepte une table JSON associant les identifiants C01 à C21 à des ExtractionResult sérialisés.
 
 Après configuration d’une clé et autorisation du coût :
 

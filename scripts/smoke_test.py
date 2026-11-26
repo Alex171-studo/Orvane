@@ -1,6 +1,5 @@
-"""Démarrer un serveur de démo local et vérifier sa disponibilité HTTP."""
+"""Démarrer un serveur Streamlit local et vérifier sa disponibilité HTTP."""
 
-import os
 import socket
 import subprocess
 import sys
@@ -26,7 +25,7 @@ def main():
         f"--server.port={port}",
         "--server.fileWatcherType=none",
     ]
-    with subprocess.Popen(command, cwd=root, env={**os.environ, "APP_MODE": "demo"}) as process:
+    with subprocess.Popen(command, cwd=root) as process:
         try:
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:

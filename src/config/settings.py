@@ -3,13 +3,11 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 
 class Settings(BaseModel):
-    APP_MODE: Literal["demo", "live"] = "demo"
     APP_TIMEZONE: str = "Europe/Paris"
-    APP_ACCESS_TOKEN: SecretStr = SecretStr("")
     GROQ_API_KEY: SecretStr = SecretStr("")
     OPENAI_API_KEY: SecretStr = SecretStr("")
     GROQ_TRANSCRIPTION_MODEL: Literal["whisper-large-v3-turbo", "whisper-large-v3"] = (
@@ -35,12 +33,6 @@ class Settings(BaseModel):
         except (ValueError, ZoneInfoNotFoundError):
             raise ValueError("Fuseau horaire inconnu.") from None
         return value
-
-    @model_validator(mode="after")
-    def check_live(self):
-        if self.APP_MODE == "live" and len(self.APP_ACCESS_TOKEN.get_secret_value().strip()) < 24:
-            raise ValueError("Le mode connecté exige une invitation d'au moins 24 caractères.")
-        return self
 
     @classmethod
     def load(cls, secrets=None):

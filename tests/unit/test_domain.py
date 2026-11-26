@@ -7,7 +7,7 @@ from src.domain.models import ProjectContext, ProposedAction
 
 def test_settings():
     assert Settings().MAX_API_CALLS_PER_SESSION == 10
-    for params in ({"APP_MODE": "live"}, {"APP_TIMEZONE": "../x"}, {"MAX_ATTEMPTS": 4}):
+    for params in ({"APP_TIMEZONE": "../x"}, {"MAX_ATTEMPTS": 4}):
         with pytest.raises(ValidationError):
             Settings(**params)
 

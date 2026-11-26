@@ -13,7 +13,7 @@ import pandas as pd
 from src.config.settings import Settings
 from src.providers.openai_extraction import OpenAIExtractionService
 from src.providers.runtime import CallRuntime
-from src.services.evaluation_service import corpus, evaluate, replay_demo
+from src.services.evaluation_service import corpus, evaluate
 from src.services.extraction_service import FieldIntelligencePipeline
 
 
@@ -32,7 +32,6 @@ def run(cfg, pairs, live, predictions=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--demo", action="store_true", help="Évaluer les cinq fixtures hors ligne.")
     group.add_argument(
         "--live", action="store_true", help="Autoriser les appels facturables OpenAI."
     )
@@ -49,15 +48,11 @@ def main():
         if args.limit < 1:
             parser.error("--limit doit être positif")
         pairs = pairs[: args.limit]
-    if not (args.live or args.predictions or args.demo):
+    if not (args.live or args.predictions):
         print(f"{len(pairs)} scénarios annotés disponibles. Aucun appel fournisseur.")
         return
     predictions = json.loads(args.predictions.read_text()) if args.predictions else None
-    report = (
-        replay_demo(Settings())
-        if args.demo
-        else run(Settings.load(), pairs, args.live, predictions)
-    )
+    report = run(Settings.load(), pairs, args.live, predictions)
     args.output.write_text(report.model_dump_json(indent=2))
     print(pd.Series(report.scores, name=report.model).to_string())
 

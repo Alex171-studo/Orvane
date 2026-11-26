@@ -36,6 +36,7 @@ def test_no_partial_result(session):
         wf.analyze(w, pipeline)
     wf.transcribe(w, "Nouvelle note de terrain.")
     wf.approve(w)
+    pipeline.provider.extract.side_effect = ExtractionError("Service indisponible.")
     with pytest.raises(ExtractionError):
         wf.analyze(w, pipeline)
     assert not w.reports and w.stage == Stage.TRANSCRIPT_APPROVED

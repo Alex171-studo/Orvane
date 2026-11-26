@@ -3,15 +3,16 @@ import re
 import unicodedata
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 from statistics import mean
 
 from pydantic import Field
 
 from src.domain.errors import OrvaneError, SchemaValidationError
 from src.domain.models import ExtractionResult, Model, ProjectContext
-from src.providers.demo_provider import DATA, DemoProvider, examples
-from src.services.extraction_service import FieldIntelligencePipeline
 from src.services.validation_service import SECTIONS, normalize
+
+DATA = Path(__file__).resolve().parents[2] / "data"
 
 
 class CaseScore(Model):
@@ -198,23 +199,3 @@ def evaluate(pairs, model, version, pipeline=None, runtime=None, predictions=Non
         version,
         "api" if pipeline else "fichier",
     )
-
-
-def replay_demo(settings):
-    targets = json.loads((DATA / "evaluation/demo_targets.json").read_text())
-    pairs = []
-    for sample, target in zip(examples(), targets, strict=True):
-        case = {
-            "id": target["id"],
-            "project": sample.name,
-            "location": sample.location,
-            "text": sample.text,
-            "reference_datetime": sample.reference_datetime,
-        }
-        pairs.append((case, target))
-    return evaluate(
-        pairs,
-        "Fixtures de démonstration",
-        "sans prompt",
-        pipeline=FieldIntelligencePipeline(DemoProvider(), settings),
-    ).model_copy(update={"source": "fixtures"})
